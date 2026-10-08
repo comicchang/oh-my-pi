@@ -190,13 +190,26 @@ describe("AgentSession Codex Cloudflare 403 one-shot retry", () => {
 	it("settles visibly after the single retry also returns the Cloudflare 403", async () => {
 		const retryStarts: Array<Extract<AgentSessionEvent, { type: "auto_retry_start" }>> = [];
 		const retryEnds: Array<Extract<AgentSessionEvent, { type: "auto_retry_end" }>> = [];
-		const { session: sess, attempts } = createHarness({
-			sessionSettings: { "retry.enabled": true, "retry.codexCloudflare403RetryOnce": true },
+		const fallbackEvents: Array<Extract<AgentSessionEvent, { type: "retry_fallback_applied" }>> = [];
+		const {
+			session: sess,
+			model,
+			attempts,
+		} = createHarness({
+			sessionSettings: {
+				"retry.enabled": true,
+				"retry.codexCloudflare403RetryOnce": true,
+				"retry.modelFallback": true,
+				"retry.fallbackChains": {
+					"openai-codex/gpt-6.1-sol": ["openai/gpt-5.5"],
+				},
+			},
 			responses: [cloudflare403(), cloudflare403()],
 		});
 		sess.subscribe(event => {
 			if (event.type === "auto_retry_start") retryStarts.push(event);
 			if (event.type === "auto_retry_end") retryEnds.push(event);
+			if (event.type === "retry_fallback_applied") fallbackEvents.push(event);
 		});
 
 		await sess.prompt("hello");
@@ -205,6 +218,8 @@ describe("AgentSession Codex Cloudflare 403 one-shot retry", () => {
 		expect(retryStarts).toHaveLength(1);
 		expect(retryEnds).toHaveLength(1);
 		expect(retryEnds[0].success).toBe(false);
+		expect(fallbackEvents).toHaveLength(0);
+		expect(sess.model?.provider).toBe(model.provider);
 		expect(lastAssistant(sess)).toMatchObject({ stopReason: "error", errorStatus: 403 });
 	});
 

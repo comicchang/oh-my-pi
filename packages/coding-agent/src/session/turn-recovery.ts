@@ -2290,6 +2290,14 @@ export class TurnRecovery {
 			IMMUTABLE_ANTHROPIC_THINKING_ERROR_PATTERN.test(message.errorMessage ?? "");
 		if (immutableAnthropicThinkingError) return false;
 		const retrySettings = cfgRetry.get(this.#host.settings);
+		if (
+			retrySettings.enabled &&
+			retrySettings.codexCloudflare403RetryOnce &&
+			this.#codexCloudflare403RetryPromptSequence === this.#host.promptSequence() &&
+			this.isCodexCloudflare403Error(message)
+		) {
+			return false;
+		}
 		if (!retrySettings.enabled || !retrySettings.modelFallback) return false;
 		if (this.isClassifierRefusal(message)) return false;
 		const id = this.#classifyRetryMessage(message);
