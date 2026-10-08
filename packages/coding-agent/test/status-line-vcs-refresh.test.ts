@@ -862,6 +862,7 @@ describe("StatusLineComponent avoids VCS probes on FUSE", () => {
 			component.getTopBorder(80);
 			const later = Date.now() + 10_000;
 			vi.spyOn(Date, "now").mockReturnValue(later);
+			component.invalidate();
 			component.getTopBorder(80);
 
 			expect(repoSpy).not.toHaveBeenCalled();

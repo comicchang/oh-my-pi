@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Fixed `omp` startup stalling when the working directory is on a Linux FUSE mount.
+- Skip synchronous automatic repository probes for Linux FUSE working directories to keep those probes from blocking OMP startup.
 
 ## [18.8.4] - 2026-10-08
 

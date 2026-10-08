@@ -475,6 +475,7 @@ interface SeparatorMetrics {
 
 interface ActiveRepoCache {
 	projectDir: string;
+	/** FUSE classification is cached with this project path and refreshed on a cwd change. */
 	skipVcs: boolean;
 	activeRepo: ActiveRepoContext | null;
 	effectiveGitCwd: string;

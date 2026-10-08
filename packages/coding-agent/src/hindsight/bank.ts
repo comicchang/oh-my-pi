@@ -22,7 +22,7 @@
 
 import * as path from "node:path";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isFusePathSync, logger } from "@oh-my-pi/pi-utils";
 import type { HindsightApi } from "./client";
 import type { HindsightConfig } from "./config";
 
@@ -61,7 +61,7 @@ function baseBankId(config: HindsightConfig): string {
  * checkout root (or the shared common dir for bare-repo worktrees) via
  * the native VCS adapter and basename that, so every linked
  * worktree of one repo shares the same `project:<name>` tag.
- * Outside a repo (or when resolution fails), fall back to the cwd basename.
+ * On FUSE mounts, outside a repo, or when resolution fails, fall back to the cwd basename.
  *
  * The basename is lowercased. The label becomes a tag, and Hindsight matches
  * tags literally, so a checkout at `.../General` would otherwise retain into a
@@ -74,6 +74,9 @@ function baseBankId(config: HindsightConfig): string {
  */
 function projectLabel(directory: string): string {
 	if (!directory) return UNKNOWN_PROJECT;
+	if (isFusePathSync(directory)) {
+		return path.basename(directory).toLowerCase() || UNKNOWN_PROJECT;
+	}
 	const primary = vcs.repo(directory)?.primaryRoot() ?? null;
 	return path.basename(primary ?? directory).toLowerCase() || UNKNOWN_PROJECT;
 }

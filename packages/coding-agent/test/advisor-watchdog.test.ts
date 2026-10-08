@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as vcs from "@oh-my-pi/pi-natives/vcs";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -10,6 +11,8 @@ import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manage
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { discoverWatchdogFiles } from "../src/advisor/watchdog";
 import { createInMemoryAuthStorage } from "./helpers/agent-session-setup";
+
+const itOnLinux = process.platform === "linux" ? it : it.skip;
 
 describe("advisor watchdog prompt discovery", () => {
 	const tempDirs: TempDir[] = [];
@@ -147,5 +150,34 @@ describe("advisor watchdog prompt discovery", () => {
 		expect(standaloneIndex).toBeGreaterThan(-1);
 		expect(userIndex).toBeLessThan(nativeIndex);
 		expect(userIndex).toBeLessThan(standaloneIndex);
+	});
+
+	itOnLinux("skips native repo probe when cwd is on a FUSE mount", async () => {
+		const tempDir = TempDir.createSync("@pi-advisor-watchdog-fuse-");
+		tempDirs.push(tempDir);
+		const cwd = tempDir.join("fuse-project");
+		const agentDir = tempDir.join("user-agent");
+		fs.mkdirSync(cwd, { recursive: true });
+		fs.mkdirSync(agentDir, { recursive: true });
+		const escapedMountPoint = cwd.replace(/ /g, "\\040");
+		const mountInfo = [
+			"29 24 0:1 / / rw,relatime - ext4 /dev/root rw",
+			`45 29 0:51 / ${escapedMountPoint} rw,nosuid,nodev,relatime - fuse.borgfs borgfs rw,user_id=1000`,
+		].join("\n");
+		const mountInfoReadSyncSpy = vi.spyOn(fs, "readFileSync").mockImplementation(((targetPath: unknown) => {
+			if (targetPath === "/proc/self/mountinfo") return mountInfo;
+			throw new Error(`ENOENT: no such file or directory, open '${String(targetPath)}'`);
+		}) as never);
+		const repoSpy = vi.spyOn(vcs, "repo").mockReturnValue(null);
+
+		try {
+			const results = await discoverWatchdogFiles(cwd, agentDir);
+			expect(results).toEqual([]);
+			expect(mountInfoReadSyncSpy).toHaveBeenCalledWith("/proc/self/mountinfo", "utf8");
+			expect(repoSpy).not.toHaveBeenCalled();
+		} finally {
+			mountInfoReadSyncSpy.mockRestore();
+			repoSpy.mockRestore();
+		}
 	});
 });

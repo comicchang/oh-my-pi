@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, type Mock, vi } from "bun:test";
+import * as nodeFs from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as vcs from "@oh-my-pi/pi-natives/vcs";
 import { computeBankScope, ensureBankExists } from "@oh-my-pi/pi-coding-agent/hindsight/bank";
 import { HindsightApi } from "@oh-my-pi/pi-coding-agent/hindsight/client";
 import type { HindsightConfig } from "@oh-my-pi/pi-coding-agent/hindsight/config";
@@ -18,6 +20,7 @@ process.env.GIT_TERMINAL_PROMPT = "0";
 process.env.GIT_ASKPASS = "true";
 delete process.env.XDG_CONFIG_HOME;
 
+const itOnLinux = process.platform === "linux" ? it : it.skip;
 function runGit(cwd: string, args: string[]): string {
 	const result = Bun.spawnSync(["git", ...args], {
 		cwd,
@@ -248,6 +251,41 @@ describe("computeBankScope", () => {
 			expect(computeBankScope(baseConfig({ scoping: "per-project-tagged" }), worktreeRoot).retainTags).toEqual([
 				"project:casedrepo",
 			]);
+		});
+	});
+
+	describe("FUSE mount handling", () => {
+		const sampleMountInfo = [
+			"29 24 0:1 / / rw,relatime - ext4 /dev/root rw",
+			"45 29 0:51 / /mnt/fuse rw,nosuid,nodev,relatime - fuse.borgfs borgfs rw,user_id=1000",
+		].join("\n");
+
+		itOnLinux("falls back to cwd basename on FUSE without probing vcs.repo", () => {
+			const readFileSyncSpy = vi.spyOn(nodeFs, "readFileSync").mockReturnValue(sampleMountInfo as never);
+			const repoSpy = vi.spyOn(vcs, "repo");
+
+			try {
+				const perProjectScope = computeBankScope(
+					baseConfig({ scoping: "per-project" }),
+					"/mnt/fuse/my-feature-repo",
+				);
+				expect(perProjectScope.bankId).toBe("omp-my-feature-repo");
+
+				const taggedScope = computeBankScope(
+					baseConfig({ scoping: "per-project-tagged" }),
+					"/mnt/fuse/My-Feature-Repo",
+				);
+				expect(taggedScope.bankId).toBe("omp");
+				expect(taggedScope.retainTags).toEqual(["project:my-feature-repo"]);
+				expect(taggedScope.recallTags).toEqual(["project:my-feature-repo"]);
+				expect(taggedScope.recallTagsMatch).toBe("any");
+
+				expect(repoSpy).not.toHaveBeenCalled();
+				expect(readFileSyncSpy).toHaveBeenCalledWith("/proc/self/mountinfo", "utf8");
+			} finally {
+				repoSpy.mockRestore();
+				readFileSyncSpy.mockRestore();
+			}
 		});
 	});
 });

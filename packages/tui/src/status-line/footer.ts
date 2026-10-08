@@ -23,6 +23,7 @@ import { col, node, span } from "../native/describe";
  * Footer component that shows pwd, token stats, and context usage
  */
 export class FooterComponent implements Component {
+	/** FUSE status is cached per path; a project-directory change forces a fresh check. */
 	#fuseProjectDir: string | undefined;
 	#projectDirOnFuse = false;
 	#cachedBranch: string | null | undefined = undefined;
