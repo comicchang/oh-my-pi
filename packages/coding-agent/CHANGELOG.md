@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `omp` startup stalling when the working directory is on a Linux FUSE mount.
+
 ## [18.8.4] - 2026-10-08
 
 ### Changed

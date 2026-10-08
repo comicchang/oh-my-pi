@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Skip status-line and footer VCS probes for working directories on Linux FUSE mounts.
+
 ## [18.8.4] - 2026-10-08
 
 ### Changed

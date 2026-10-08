@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Linux mountinfo helpers that identify FUSE-backed paths without probing the target directory.
+
 ## [18.8.1] - 2026-10-07
 
 ### Added
