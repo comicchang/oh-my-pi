@@ -306,6 +306,7 @@ export class TurnRecovery {
 	#retryAbortController: AbortController | undefined;
 	#retryAttempt = 0;
 	#requestBodyReadTimeoutRecoveryPromptSequence: number | undefined;
+	#codexCloudflare403RetryPromptSequence: number | undefined;
 	#retryPromise: Promise<void> | undefined;
 	#retryResolve: (() => void) | undefined;
 	#activeRetryFallback: ActiveRetryFallbackState | undefined;
@@ -458,6 +459,7 @@ export class TurnRecovery {
 		this.#malformedFunctionCallRetryCount = 0;
 		this.#streamStallContinueCount = 0;
 		this.#acceptTerminalEmptyStopForPrompt = false;
+		this.#codexCloudflare403RetryPromptSequence = undefined;
 		this.#activeFallbackCreditRedemption = undefined;
 	}
 
@@ -1395,6 +1397,46 @@ export class TurnRecovery {
 			return terminal();
 		}
 		return (await this.#handleRetryableError(message, { allowModelFallback: false })) ? "handled-retry" : terminal();
+	}
+	/**
+	 * Matches a transient Cloudflare region block HTTP 403 error on openai-codex.
+	 */
+	isCodexCloudflare403Error(message: AssistantMessage): boolean {
+		const model = this.#host.model();
+		if (
+			message.stopReason !== "error" ||
+			message.provider !== "openai-codex" ||
+			message.api !== "openai-codex-responses" ||
+			model?.provider !== "openai-codex" ||
+			model.api !== "openai-codex-responses"
+		) {
+			return false;
+		}
+		// `errorId` is a classifier bitmask, not an HTTP status.
+		if (message.errorStatus !== 403 || message.content.length !== 0) return false;
+		const errorMessage = message.errorMessage ?? "";
+		const normalizedMessage = errorMessage.toLowerCase();
+		return (
+			normalizedMessage.includes("<html") &&
+			normalizedMessage.includes("unable to load site") &&
+			/\bray id\s*:/i.test(errorMessage)
+		);
+	}
+
+	/**
+	 * Handles opt-in one-shot retry for Codex Cloudflare region-block 403 errors.
+	 */
+	async handleCodexCloudflare403Error(message: AssistantMessage): Promise<boolean> {
+		if (!this.isCodexCloudflare403Error(message)) return false;
+		const retrySettings = cfgRetry.get(this.#host.settings);
+		if (!retrySettings.enabled || !retrySettings.codexCloudflare403RetryOnce) return false;
+		const promptSequence = this.#host.promptSequence();
+		if (this.#codexCloudflare403RetryPromptSequence === promptSequence) return false;
+		this.#codexCloudflare403RetryPromptSequence = promptSequence;
+		if (this.#host.isDisposed() || this.#host.abortInProgress() || this.#host.isCompacting()) {
+			return false;
+		}
+		return this.#handleRetryableError(message, { allowModelFallback: false });
 	}
 
 	/**

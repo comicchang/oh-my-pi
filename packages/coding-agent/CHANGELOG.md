@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in one-shot retry for matching empty-output Cloudflare 403 failures on OpenAI Codex requests, including subagent sessions.
+
 ## [18.8.4] - 2026-10-08
 
 ### Changed

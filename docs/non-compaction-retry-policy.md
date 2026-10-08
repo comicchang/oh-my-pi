@@ -198,6 +198,7 @@ Defined in `packages/coding-agent/src/session/settings.ts`:
 - `retry.usageAwareFallback` (default `false`; runs a preflight for supported coding-plan usage reports)
 - `retry.usageReservePct` (default `10`; remaining-quota reserve threshold)
 - `retry.usageReservePolicy` (default `"confirm"`; `"auto"` and `"fail-closed"` are also supported)
+- `retry.codexCloudflare403RetryOnce` (default `false`; one signature-matched, empty-output OpenAI Codex HTTP 403 retry per prompt, including subagents; generic 401/403 remains terminal)
 
 Programmatic toggles in session:
 

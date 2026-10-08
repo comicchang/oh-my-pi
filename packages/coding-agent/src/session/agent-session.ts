@@ -4319,6 +4319,11 @@ export class AgentSession implements SettingsScope {
 					return;
 				}
 			}
+			if (!requestBodyTimeoutTerminal && (await this.#recovery.handleCodexCloudflare403Error(msg))) {
+				maintenanceRoute("codex-cloudflare-403-retry");
+				await emitAgentEndNotification({ willContinue: true });
+				return;
+			}
 			const resumeResolvedStreamStall = resolvedInterruptedToolTurn === "stream-stall";
 			if (!requestBodyTimeoutTerminal && (resumeResolvedStreamStall || this.#recovery.isRetryableError(msg))) {
 				const didRetry = await this.#recovery.handleRetryableError(

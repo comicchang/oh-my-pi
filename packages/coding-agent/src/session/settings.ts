@@ -738,6 +738,18 @@ export const cfgRetryModelFallback = register({
 		description: "Allow retry recovery to switch to configured fallback models",
 	},
 });
+export const cfgRetryCodexCloudflare403RetryOnce = register({
+	id: "retry.codexCloudflare403RetryOnce",
+	type: "boolean",
+	default: false,
+	ui: {
+		tab: "model",
+		group: "Retry & Fallback",
+		label: "Retry Codex Cloudflare 403 Once",
+		description:
+			"Retry once on transient OpenAI Codex HTTP 403 Cloudflare region-block HTML responses before settling as an error.",
+	},
+});
 
 export const cfgRetryUsageAwareFallback = register({
 	id: "retry.usageAwareFallback",
@@ -849,6 +861,7 @@ export const cfgRetry = combine({
 	usageAwareFallback: cfgRetryUsageAwareFallback,
 	usageReservePct: cfgRetryUsageReservePct,
 	usageReservePolicy: cfgRetryUsageReservePolicy,
+	codexCloudflare403RetryOnce: cfgRetryCodexCloudflare403RetryOnce,
 });
 
 /** Retry/backoff policy ({@link cfgRetry}). */
