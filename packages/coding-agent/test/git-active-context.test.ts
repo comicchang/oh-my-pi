@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
 
 import {
@@ -8,7 +9,9 @@ import {
 	resolveActiveRepoContextSync,
 } from "@oh-my-pi/pi-coding-agent/utils/active-repo-context";
 import type { ActiveRepoContext } from "@oh-my-pi/pi-tui/status-line/host";
+import * as vcs from "@oh-my-pi/pi-natives/vcs";
 
+const itOnLinux = process.platform === "linux" ? it : it.skip;
 const itWithSymlinkPrivilege = process.platform === "win32" ? it.skip : it;
 
 function createGitDirectory(repoRoot: string): void {
@@ -40,6 +43,7 @@ describe("resolveActiveRepoContext", () => {
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 	});
 
@@ -174,5 +178,36 @@ describe("resolveActiveRepoContext", () => {
 			source: "single-direct-child-repo",
 		} satisfies ActiveRepoContext;
 		await expectResolvers(cwd, expected);
+	});
+	itOnLinux("skips native VCS and directory probes when cwd is on a FUSE mount", async () => {
+		const cwd = "/mnt/omp-fuse cwd/project";
+		const mountInfo = [
+			"29 24 0:1 / / rw,relatime - ext4 /dev/root rw",
+			"45 29 0:51 / /mnt/omp-fuse\\040cwd rw,nosuid,nodev,relatime - fuse.borgfs borgfs rw,user_id=1000",
+		].join("\n");
+		const bunFileSpy = vi.spyOn(Bun, "file").mockReturnValue({
+			text: async () => mountInfo,
+		} as never);
+		const mountInfoReadSyncSpy = vi.spyOn(fs, "readFileSync").mockReturnValue(mountInfo as never);
+		const repoSpy = vi.spyOn(vcs, "repo").mockReturnValue(null);
+		const gitInfoSpy = vi.spyOn(vcs, "gitInfo");
+		const readdirSpy = vi.spyOn(fsPromises, "readdir");
+		const statSpy = vi.spyOn(fsPromises, "stat");
+		const readdirSyncSpy = vi.spyOn(fs, "readdirSync");
+		const statSyncSpy = vi.spyOn(fs, "statSync");
+
+		await expect(resolveActiveRepoContext(cwd)).resolves.toBeNull();
+		expect(bunFileSpy).toHaveBeenCalledWith("/proc/self/mountinfo");
+		expect(repoSpy).not.toHaveBeenCalled();
+		expect(gitInfoSpy).not.toHaveBeenCalled();
+		expect(readdirSpy).not.toHaveBeenCalled();
+		expect(statSpy).not.toHaveBeenCalled();
+
+		expect(resolveActiveRepoContextSync(cwd)).toBeNull();
+		expect(mountInfoReadSyncSpy).toHaveBeenCalledWith("/proc/self/mountinfo", "utf8");
+		expect(repoSpy).not.toHaveBeenCalled();
+		expect(gitInfoSpy).not.toHaveBeenCalled();
+		expect(readdirSyncSpy).not.toHaveBeenCalled();
+		expect(statSyncSpy).not.toHaveBeenCalled();
 	});
 });

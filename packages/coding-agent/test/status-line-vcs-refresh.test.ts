@@ -25,6 +25,8 @@ import type { VcsGitRepo, VcsGitRepoInfo, VcsHeadState, VcsRepo } from "@oh-my-p
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
 import { getProjectDir, setProjectDir } from "@oh-my-pi/pi-utils";
 
+const itOnLinux = process.platform === "linux" ? it : it.skip;
+
 type GitStatus = { staged: number; unstaged: number; untracked: number };
 
 const originalProjectDir = getProjectDir();
@@ -835,5 +837,40 @@ describe("StatusLineComponent git watcher survives atomic HEAD renames", () => {
 		expect(component.getTopBorder(80).content).toContain("second");
 
 		component.dispose();
+	});
+});
+
+describe("StatusLineComponent avoids VCS probes on FUSE", () => {
+	itOnLinux("skips probes on initial render and after the negative-cache TTL", () => {
+		const previousProjectDir = getProjectDir();
+		const fuseDir = previousProjectDir;
+		const mountInfo = [
+			"29 24 0:1 / / rw,relatime - ext4 /dev/root rw",
+			`45 29 0:51 / ${fuseDir} rw,nosuid,nodev,relatime - fuse.borgfs borgfs rw,user_id=1000`,
+		].join("\n");
+		vi.spyOn(statusLineHost, "gitEnabled").mockReturnValue(true);
+		vi.spyOn(nodeFs, "readFileSync").mockReturnValue(mountInfo as never);
+		const repoSpy = vi.spyOn(vcs, "repo").mockReturnValue(null);
+		const repoForDisplaySpy = vi.spyOn(vcs, "repoForDisplay").mockReturnValue(null);
+		const gitSpy = vi.spyOn(vcs, "git").mockReturnValue(null);
+		const gitInfoSpy = vi.spyOn(vcs, "gitInfo").mockReturnValue(null);
+		setProjectDir(fuseDir);
+		const component = new StatusLineComponent(makeSession(), statusLineHost);
+		component.updateSettings(gitSegment);
+		try {
+			component.watchBranch(vi.fn());
+			component.getTopBorder(80);
+			const later = Date.now() + 10_000;
+			vi.spyOn(Date, "now").mockReturnValue(later);
+			component.getTopBorder(80);
+
+			expect(repoSpy).not.toHaveBeenCalled();
+			expect(repoForDisplaySpy).not.toHaveBeenCalled();
+			expect(gitSpy).not.toHaveBeenCalled();
+			expect(gitInfoSpy).not.toHaveBeenCalled();
+		} finally {
+			component.dispose();
+			setProjectDir(previousProjectDir);
+		}
 	});
 });

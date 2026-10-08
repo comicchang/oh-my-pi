@@ -2,7 +2,7 @@ import { stripVTControlCharacters } from "node:util";
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
 import { type Component, padding, truncateToWidth, visibleWidth } from "../index";
-import { formatNumber, getProjectDir } from "@oh-my-pi/pi-utils";
+import { formatNumber, getProjectDir, isFusePathSync } from "@oh-my-pi/pi-utils";
 import { theme } from "../theme";
 import type { FooterHost, FooterSession } from "./host";
 import { shortenPath } from "../render/render-utils";
@@ -23,6 +23,8 @@ import { col, node, span } from "../native/describe";
  * Footer component that shows pwd, token stats, and context usage
  */
 export class FooterComponent implements Component {
+	#fuseProjectDir: string | undefined;
+	#projectDirOnFuse = false;
 	#cachedBranch: string | null | undefined = undefined;
 	#branchResolve: AbortController | undefined;
 	#branchGeneration = 0;
@@ -37,6 +39,15 @@ export class FooterComponent implements Component {
 		private readonly session: FooterSession,
 		private readonly host: FooterHost,
 	) {}
+
+	#isProjectDirOnFuse(): boolean {
+		const projectDir = getProjectDir();
+		if (this.#fuseProjectDir !== projectDir) {
+			this.#fuseProjectDir = projectDir;
+			this.#projectDirOnFuse = isFusePathSync(projectDir);
+		}
+		return this.#projectDirOnFuse;
+	}
 
 	setAutoCompactEnabled(enabled: boolean): void {
 		this.#autoCompactEnabled = enabled;
@@ -70,6 +81,10 @@ export class FooterComponent implements Component {
 		this.#gitUnwatch = null;
 
 		if (!this.host.gitEnabled()) return;
+		if (this.#isProjectDirOnFuse()) {
+			this.#cachedBranch = null;
+			return;
+		}
 		const repository = vcs.repoForDisplay(getProjectDir());
 		if (!repository) return;
 
@@ -110,6 +125,10 @@ export class FooterComponent implements Component {
 	 */
 	#getCurrentBranch(): string | null {
 		if (!this.host.gitEnabled()) return null;
+		if (this.#isProjectDirOnFuse()) {
+			this.#cachedBranch = null;
+			return null;
+		}
 		if (this.#cachedBranch !== undefined) {
 			return this.#cachedBranch;
 		}

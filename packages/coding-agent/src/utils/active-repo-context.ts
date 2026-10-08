@@ -4,6 +4,7 @@ import * as path from "node:path";
 
 import * as vcs from "@oh-my-pi/pi-natives/vcs";
 
+import { isFusePath, isFusePathSync } from "@oh-my-pi/pi-utils";
 import type { ActiveRepoContext } from "@oh-my-pi/pi-tui/status-line/host";
 
 function compareEntryNames(left: fs.Dirent, right: fs.Dirent): number {
@@ -128,12 +129,14 @@ function findSingleDirectChildRepoSync(cwd: string): ActiveRepoContext | null {
 
 export async function resolveActiveRepoContext(cwd: string): Promise<ActiveRepoContext | null> {
 	const resolvedCwd = path.resolve(cwd);
+	if (await isFusePath(resolvedCwd)) return null;
 	if (insideRepository(resolvedCwd)) return null;
 	return findSingleDirectChildRepo(resolvedCwd);
 }
 
 export function resolveActiveRepoContextSync(cwd: string): ActiveRepoContext | null {
 	const resolvedCwd = path.resolve(cwd);
+	if (isFusePathSync(resolvedCwd)) return null;
 	if (insideRepository(resolvedCwd)) return null;
 	return findSingleDirectChildRepoSync(resolvedCwd);
 }

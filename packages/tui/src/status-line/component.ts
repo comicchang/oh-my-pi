@@ -18,7 +18,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "../index";
-import { adjustHsv, formatNumber, getProjectDir, hexToRgb, rgbToHex } from "@oh-my-pi/pi-utils";
+import { adjustHsv, formatNumber, getProjectDir, hexToRgb, isFusePathSync, rgbToHex } from "@oh-my-pi/pi-utils";
 import type {
 	ActiveRepoContext,
 	StatusAccountIdentity as OAuthAccountIdentity,
@@ -475,6 +475,7 @@ interface SeparatorMetrics {
 
 interface ActiveRepoCache {
 	projectDir: string;
+	skipVcs: boolean;
 	activeRepo: ActiveRepoContext | null;
 	effectiveGitCwd: string;
 	repository: VcsRepo | null;
@@ -835,6 +836,24 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 			return this.#activeRepoCache;
 		}
 
+		// The native VCS probe can block on FUSE, so inspect procfs first.
+		const skipVcs = isFusePathSync(projectDir);
+		if (skipVcs) {
+			const checkedAt = Date.now();
+			this.#activeRepoCache = {
+				projectDir,
+				skipVcs,
+				activeRepo: null,
+				effectiveGitCwd: projectDir,
+				repository: null,
+				displayRepository: null,
+				displayRepositoryCheckedAt: checkedAt,
+				repositoryCheckedAt: checkedAt,
+				worktree: null,
+			};
+			return this.#activeRepoCache;
+		}
+
 		const projectRepository = vcs.repo(projectDir);
 		const activeRepo = projectRepository ? null : this.host.resolveActiveRepo(projectDir);
 		const effectiveGitCwd = activeRepo?.repoRoot ?? projectDir;
@@ -856,6 +875,7 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 		const worktree = activeRepo ? null : resolveWorktreeContext(effectiveGitCwd);
 		this.#activeRepoCache = {
 			projectDir,
+			skipVcs,
 			activeRepo,
 			effectiveGitCwd,
 			repository,
@@ -868,6 +888,7 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 	}
 
 	#resolveRepository(cache: ActiveRepoCache): VcsRepo | null {
+		if (cache.skipVcs) return null;
 		if (cache.repository) return cache.repository;
 		const now = Date.now();
 		if (now - cache.repositoryCheckedAt >= WATCHER_FAILURE_POLL_TTL_MS) {
@@ -880,6 +901,7 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 	}
 
 	#resolveDisplayRepository(cache: ActiveRepoCache): VcsRepo | null {
+		if (cache.skipVcs) return null;
 		if (cache.displayRepository) return cache.displayRepository;
 		const now = Date.now();
 		if (now - cache.displayRepositoryCheckedAt >= WATCHER_FAILURE_POLL_TTL_MS) {
@@ -2455,6 +2477,7 @@ export class StatusLineComponent<TSession extends StatusLineSession = StatusLine
 			? this.#resolveActiveRepoCache()
 			: {
 					projectDir,
+					skipVcs: false,
 					activeRepo: null,
 					effectiveGitCwd: projectDir,
 					repository: null,
